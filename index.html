@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dračí farma – první verze</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#355d42,#13251c 70%);color:#fff8e7;font-family:system-ui,Arial,sans-serif}
+#wrap{max-width:1180px;margin:auto;padding:14px}h1{margin:2px 0 12px;font-size:28px;letter-spacing:.2px;text-shadow:0 2px 3px #0008}
+#game{position:relative;border:4px solid #6f4a2b;border-radius:18px;overflow:hidden;background:#76b85f;box-shadow:0 12px 35px #0008}
+canvas{display:block;width:100%;height:auto;image-rendering:auto}
+#hud{display:flex;gap:8px;flex-wrap:wrap;margin:9px 0}.pill,button{background:linear-gradient(#fff2c8,#e9d49d);color:#342515;border:2px solid #76532e;border-radius:11px;padding:8px 12px;font-weight:800;box-shadow:0 3px 7px #0005}
+button{cursor:pointer}button:hover{transform:translateY(-1px);filter:brightness(1.06)}
+#bottom{display:grid;grid-template-columns:1fr 310px;gap:10px;margin-top:10px}
+.panel{background:linear-gradient(145deg,#294433,#1b3024);border:1px solid #78906b;border-radius:14px;padding:13px;box-shadow:0 7px 18px #0005}.panel h2{font-size:18px;margin:0 0 8px}
+#log{min-height:74px;line-height:1.5;color:#ffecc1}.task{padding:7px 0;border-bottom:1px solid #52705a}.done{text-decoration:line-through;opacity:.6}
+.help{font-size:13px;opacity:.9;line-height:1.55}
+@media(max-width:800px){#bottom{grid-template-columns:1fr}#game{border-width:2px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+<h1>🐉 Dračí farma – první hratelná verze</h1>
+<div id="hud">
+<span class="pill">❤️ Životy: <b id="hp">100</b></span>
+<span class="pill">🐲 Drak: <b id="dragon">není</b></span>
+<span class="pill">🏡 Farma: <b id="farm">0 %</b></span>
+<span class="pill">📖 Úkoly: <b id="count">0/5</b></span>
+<button id="view">Pohled: shora</button><button id="reset">Nová hra</button>
+</div>
+<div id="game"><canvas id="c" width="1000" height="620" aria-label="Herní mapa"></canvas></div>
+<div id="bottom">
+<div class="panel"><h2>📜 Kniha úkolů</h2><div id="tasks"></div><p class="help">Šipky / WASD = pohyb · myš = útok · M = vytasit zbraň · N = nasednout na draka · Mezerník = akce</p></div>
+<div class="panel"><h2>💬 Dobrodružství</h2><div id="log" aria-live="polite">Najdi svého prvního dračího kamaráda. Modrý drak čeká v lese.</div></div>
+</div>
+</div>
+<script>
+(()=> {
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const hpEl=document.getElementById('hp'),dragonEl=document.getElementById('dragon'),farmEl=document.getElementById('farm'),countEl=document.getElementById('count'),tasksEl=document.getElementById('tasks'),logEl=document.getElementById('log'),viewBtn=document.getElementById('view');
+const W=1000,H=620;
+let state, keys={}, mouse={x:500,y:300,down:false}, view=0, last=0, running=true;
+
+const taskNames=["Najdi prvního draka","Pomoz vesnici","Postav první část dračí farmy","Poraz nepřátelského jezdce","Odhal vstup do Dračí říše"];
+function reset(){
+ state={x:150,y:480,hp:100,dragon:false,mounted:false,weapon:false,farm:0,enemy:{x:760,y:220,hp:60,alive:true},tasks:Array(5).fill(false),log:"Vydej se do lesa. Tvůj první drak čeká poblíž starého dubu.",shot:0};
+ update();
+}
+function say(t){state.log=t;logEl.textContent=t}
+function complete(i,text){if(!state.tasks[i]){state.tasks[i]=true;say(text)}}
+function update(){
+ hpEl.textContent=Math.max(0,Math.round(state.hp)); dragonEl.textContent=state.dragon?(state.mounted?"sedíš na něm":"získán"):"není";
+ farmEl.textContent=state.farm+" %";let n=state.tasks.filter(Boolean).length;countEl.textContent=n+"/5";
+ tasksEl.innerHTML=taskNames.map((t,i)=>`<div class="task ${state.tasks[i]?'done':''}">${state.tasks[i]?'✅':'⬜'} ${t}</div>`).join('');
+}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function blocked(x,y){
+ return x<24||x>W-24||y<24||y>H-24 ||
+   (x>310&&x<680&&y>35&&y<145) || (x>420&&x<545&&y>350&&y<580);
+}
+function move(dx,dy){
+ const sp=state.mounted?3.9:2.8;let nx=state.x+dx*sp,ny=state.y+dy*sp;
+ if(!blocked(nx,state.y))state.x=nx;if(!blocked(state.x,ny))state.y=ny;
+}
+function interact(){
+ if(!state.dragon && state.x>520&&state.x<680&&state.y>145&&state.y<300){
+   state.dragon=true;complete(0,"Drak ti začal věřit! Od této chvíle je tvým nejlepším dračím kamarádem.");
+ }
+ if(state.x<250&&state.y>390){complete(1,"Vesnici jsi pomohl najít ztracené zásoby. Královna ti posílá dřevo na farmu.");}
+ if(state.dragon&&state.farm<100&&state.x>75&&state.x<300&&state.y>80&&state.y<300){
+   state.farm=Math.min(100,state.farm+25);
+   if(state.farm>=100)complete(2,"Dračí farma je postavená! Teď ji musíš ochránit.");
+   else say("Postavil/a jsi část dračí farmy. Vrať se sem později pro další práci.");
+ }
+ if(state.enemy.alive&&dist(state,state.enemy)<75&&state.weapon){
+   state.enemy.hp-=35;
+   say("Zásah! Temný jezdec utrpěl poškození.");
+   if(state.enemy.hp<=0){state.enemy.alive=false;complete(3,"Temného jezdce jsi porazil/a. Cesta k Dračí říši je otevřená.");}
+ }
+ if(state.x>850&&state.y>470&&state.dragon){complete(4,"Odhalil/a jsi bránu do Dračí říše! Všechny hlavní úkoly jsou splněny. 🎉");say("🎉 Vítězství! Stal/a ses ochráncem dračí farmy.");}
+ update();
+}
+function attack(){
+ if(!state.weapon)return say("Nejdřív stiskni M a vytas zbraň.");
+ const a=state.enemy;if(!a.alive)return;
+ const dx=mouse.x-state.x,dy=mouse.y-state.y,d=Math.hypot(dx,dy)||1;
+ if(d<145){a.hp-=25;say("⚔️ Útok zasáhl nepřítele!");if(a.hp<=0){a.alive=false;complete(3,"Temného jezdce jsi porazil/a!");}}
+ else say("Nepřítel je příliš daleko.");
+ update();
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ // lush base terrain
+ ctx.fillStyle="#86c96f";ctx.fillRect(0,0,W,H);
+ // meadow patches
+ ctx.fillStyle="#9bd77d";ctx.beginPath();ctx.ellipse(190,310,280,180,0,0,7);ctx.fill();
+ ctx.fillStyle="#75bb69";ctx.beginPath();ctx.ellipse(720,340,320,190,0,0,7);ctx.fill();
+ // dirt road
+ ctx.strokeStyle="#d8bd7b";ctx.lineWidth=54;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(0,520);ctx.bezierCurveTo(260,430,420,520,610,455);ctx.bezierCurveTo(760,405,820,470,900,520);ctx.stroke();
+ ctx.strokeStyle="#ead59b";ctx.lineWidth=42;ctx.beginPath();ctx.moveTo(0,520);ctx.bezierCurveTo(260,430,420,520,610,455);ctx.bezierCurveTo(760,405,820,470,900,520);ctx.stroke();
+ // water
+ ctx.fillStyle="#4fafd0";ctx.beginPath();ctx.moveTo(700,390);ctx.quadraticCurveTo(820,350,1000,405);ctx.lineTo(1000,620);ctx.lineTo(690,620);ctx.closePath();ctx.fill();
+ ctx.strokeStyle="#8ed7e5";ctx.lineWidth=3;for(let y=430;y<610;y+=34){ctx.beginPath();ctx.moveTo(750,y);ctx.quadraticCurveTo(800,y-8,850,y);ctx.quadraticCurveTo(900,y+8,960,y);ctx.stroke();}
+ // island
+ ctx.fillStyle="#dbc67f";ctx.beginPath();ctx.ellipse(855,500,110,63,-.08,0,7);ctx.fill();
+ ctx.fillStyle="#6fa55a";ctx.beginPath();ctx.ellipse(850,490,82,38,-.1,0,7);ctx.fill();
+ // mountains with snow
+ ctx.fillStyle="#606a73";ctx.beginPath();ctx.moveTo(680,0);ctx.lineTo(770,165);ctx.lineTo(835,65);ctx.lineTo(925,175);ctx.lineTo(1000,85);ctx.lineTo(1000,0);ctx.closePath();ctx.fill();
+ ctx.fillStyle="#eee8d7";ctx.beginPath();ctx.moveTo(770,165);ctx.lineTo(795,122);ctx.lineTo(812,95);ctx.lineTo(835,65);ctx.lineTo(850,105);ctx.lineTo(835,115);ctx.lineTo(823,103);ctx.lineTo(807,135);ctx.closePath();ctx.fill();
+ // forest canopy
+ for(let x=320;x<675;x+=42)for(let y=38;y<155;y+=38){
+   ctx.fillStyle="#315c3b";ctx.beginPath();ctx.arc(x,y,23,0,7);ctx.fill();
+   ctx.fillStyle="#3d7348";ctx.beginPath();ctx.arc(x-9,y-8,13,0,7);ctx.fill();
+   ctx.fillStyle="#68492b";ctx.fillRect(x-4,y+17,8,22);
+ }
+ // flowers
+ for(let i=0;i<26;i++){let x=25+(i*83)%650,y=285+(i*47)%95;ctx.fillStyle=i%2?"#f4d45e":"#e8849d";ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fill();ctx.fillStyle="#e4bd45";ctx.beginPath();ctx.arc(x,y,1.5,0,7);ctx.fill();}
+ // farm compound
+ ctx.fillStyle="#9d713e";ctx.fillRect(55,62,255,245);
+ ctx.strokeStyle="#654529";ctx.lineWidth=7;ctx.strokeRect(55,62,255,245);
+ // fence posts
+ ctx.strokeStyle="#e4c18a";ctx.lineWidth=6;for(let x=65;x<310;x+=24){ctx.beginPath();ctx.moveTo(x,62);ctx.lineTo(x,307);ctx.stroke();}
+ ctx.fillStyle="#ead5a0";ctx.fillRect(92,125,115,78);
+ ctx.fillStyle="#a9513f";ctx.beginPath();ctx.moveTo(82,125);ctx.lineTo(149,85);ctx.lineTo(217,125);ctx.closePath();ctx.fill();
+ ctx.fillStyle="#74462d";ctx.fillRect(137,160,28,43);ctx.fillStyle="#8ec4d1";ctx.fillRect(102,146,23,24);ctx.fillRect(177,146,23,24);
+ ctx.fillStyle="#6d9f4d";for(let i=0;i<4;i++){ctx.fillRect(80+i*47,230,28,40);}
+ // village houses
+ for(let x=70;x<290;x+=68){
+   ctx.fillStyle="#f0c879";ctx.fillRect(x,365,48,43);ctx.fillStyle="#ad5843";
+   ctx.beginPath();ctx.moveTo(x-6,365);ctx.lineTo(x+24,339);ctx.lineTo(x+54,365);ctx.closePath();ctx.fill();
+   ctx.fillStyle="#79aabd";ctx.fillRect(x+8,378,12,14);
+ }
+ // castle
+ ctx.fillStyle="#c9c4b1";ctx.fillRect(390,220,150,100);ctx.fillRect(375,195,35,125);ctx.fillRect(520,195,35,125);
+ ctx.fillStyle="#b04e45";ctx.beginPath();ctx.moveTo(367,195);ctx.lineTo(392,165);ctx.lineTo(417,195);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(512,195);ctx.lineTo(537,165);ctx.lineTo(562,195);ctx.closePath();ctx.fill();
+ ctx.fillStyle="#704c38";ctx.fillRect(450,260,30,60);ctx.fillStyle="#7fa5ba";ctx.fillRect(405,235,20,25);ctx.fillRect(505,235,20,25);
+ // cave
+ ctx.fillStyle="#403b45";ctx.beginPath();ctx.arc(845,300,60,Math.PI,0);ctx.lineTo(905,340);ctx.lineTo(785,340);ctx.closePath();ctx.fill();
+ ctx.fillStyle="#17171c";ctx.beginPath();ctx.arc(845,315,37,Math.PI,0);ctx.lineTo(882,340);ctx.lineTo(808,340);ctx.closePath();ctx.fill();
+ // wooden bridge
+ ctx.fillStyle="#765032";ctx.fillRect(812,385,76,145);for(let y=390;y<530;y+=20){ctx.fillStyle="#b8834e";ctx.fillRect(812,y,76,11);}
+ // labels
+ ctx.font="bold 18px system-ui";ctx.fillStyle="#263b26";ctx.shadowColor="#fff8";ctx.shadowBlur=4;
+ ctx.fillText("DRAČÍ FARMA",92,45);ctx.fillText("KOUZELNÝ LES",405,30);ctx.fillText("VESNICE",115,435);ctx.fillText("HRAD",445,350);ctx.fillText("HORY",805,30);ctx.fillText("JESKYNĚ",802,365);ctx.fillText("DRAČÍ BRÁNA",785,560);ctx.shadowBlur=0;
+ // dragon waiting
+ if(!state.dragon){
+   ctx.fillStyle="#3479c5";ctx.beginPath();ctx.ellipse(590,215,48,29,0,0,7);ctx.fill();
+   ctx.fillStyle="#75b9ee";ctx.beginPath();ctx.moveTo(560,208);ctx.lineTo(516,171);ctx.lineTo(567,192);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(620,208);ctx.lineTo(664,171);ctx.lineTo(625,220);ctx.closePath();ctx.fill();
+   ctx.fillStyle="#2a5f9c";ctx.beginPath();ctx.moveTo(630,220);ctx.lineTo(650,236);ctx.lineTo(625,231);ctx.closePath();ctx.fill();
+   ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(575,207,5,0,7);ctx.arc(607,207,5,0,7);ctx.fill();ctx.fillStyle="#222";ctx.beginPath();ctx.arc(575,207,2,0,7);ctx.arc(607,207,2,0,7);ctx.fill();
+   ctx.fillStyle="#fff";ctx.font="bold 16px system-ui";ctx.fillText("PRVNÍ DRAK ★",540,267);
+   ctx.strokeStyle="#fff7";ctx.lineWidth=2;ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(590,215,78,0,7);ctx.stroke();ctx.setLineDash([]);
+ } else {
+   ctx.save();ctx.translate(state.mounted?state.x-30:state.x+54,state.mounted?state.y-15:state.y+18);
+   ctx.fillStyle="#3d91d1";ctx.beginPath();ctx.ellipse(0,0,40,24,0,0,7);ctx.fill();
+   ctx.fillStyle="#77c0ef";ctx.beginPath();ctx.moveTo(-18,-5);ctx.lineTo(-68,-40);ctx.lineTo(-38,8);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(18,-5);ctx.lineTo(68,-40);ctx.lineTo(38,8);ctx.closePath();ctx.fill();
+   ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(25,-6,4,0,7);ctx.fill();ctx.restore();
+ }
+ // enemy and dark dragon
+ if(state.enemy.alive){
+   ctx.fillStyle="#292936";ctx.beginPath();ctx.ellipse(state.enemy.x-18,state.enemy.y+18,36,18,0,0,7);ctx.fill();
+   ctx.fillStyle="#161621";ctx.beginPath();ctx.moveTo(state.enemy.x-35,state.enemy.y+14);ctx.lineTo(state.enemy.x-85,state.enemy.y-12);ctx.lineTo(state.enemy.x-48,state.enemy.y+30);ctx.closePath();ctx.fill();
+   ctx.fillStyle="#7b2535";ctx.beginPath();ctx.arc(state.enemy.x,state.enemy.y-10,16,0,7);ctx.fill();
+   ctx.fillStyle="#ddd";ctx.font="bold 15px system-ui";ctx.fillText("TEMNÝ JEZDEC",state.enemy.x-58,state.enemy.y+62);
+   ctx.fillStyle="#32121a";ctx.fillRect(state.enemy.x-40,state.enemy.y-52,80,7);ctx.fillStyle="#df4e55";ctx.fillRect(state.enemy.x-40,state.enemy.y-52,Math.max(0,80*state.enemy.hp/60),7);
+ }
+ // hero
+ ctx.fillStyle="#d69b6e";ctx.beginPath();ctx.arc(state.x,state.y-16,11,0,7);ctx.fill();
+ ctx.fillStyle="#4a2d25";ctx.beginPath();ctx.arc(state.x,state.y-20,13,Math.PI,0);ctx.fill();
+ ctx.fillStyle="#d8a936";ctx.fillRect(state.x-12,state.y-4,24,27);ctx.fillStyle="#3d2b26";ctx.fillRect(state.x-10,state.y+23,8,15);ctx.fillRect(state.x+2,state.y+23,8,15);
+ if(state.weapon){ctx.strokeStyle="#f1f3e8";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(state.x+10,state.y+3);ctx.lineTo(state.x+31,state.y-24);ctx.stroke();ctx.strokeStyle="#c99a55";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(state.x+5,state.y);ctx.lineTo(state.x+15,state.y+7);ctx.stroke();}
+ if(state.mounted){ctx.strokeStyle="#f8dc6b";ctx.lineWidth=3;ctx.beginPath();ctx.arc(state.x,state.y,35,0,7);ctx.stroke();}
+ // objective arrow
+ if(!state.dragon){ctx.fillStyle="#fff6a6";ctx.font="bold 30px system-ui";ctx.fillText("★",580,145);}
+}
+function loop(t){
+ if(!running)return;const dt=Math.min(40,t-last);last=t;
+ let dx=(keys.ArrowRight||keys.d?1:0)-(keys.ArrowLeft||keys.a?1:0),dy=(keys.ArrowDown||keys.s?1:0)-(keys.ArrowUp||keys.w?1:0);
+ if(dx||dy){const l=Math.hypot(dx,dy);move(dx/l,dy/l)}
+ if(state.enemy.alive&&dist(state,state.enemy)<100){state.hp-=0.025*dt;if(state.hp<=0){state.hp=100;state.x=150;state.y=480;say("Temný jezdec tě porazil. Vrátil/a ses do vesnice.");}}
+ draw();update();requestAnimationFrame(loop);
+}
+canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect();mouse.x=(e.clientX-r.left)*W/r.width;mouse.y=(e.clientY-r.top)*H/r.height});
+canvas.addEventListener('pointerdown',e=>{mouse.down=true;attack()});window.addEventListener('pointerup',()=>mouse.down=false);
+window.addEventListener('keydown',e=>{if(["INPUT","TEXTAREA"].includes(document.activeElement.tagName))return;keys[e.key]=true;if(e.key==="m"||e.key==="M"){state.weapon=!state.weapon;say(state.weapon?"⚔️ Zbraň je připravena.":"Zbraň je schovaná.");}if(e.key==="n"||e.key==="N"){if(state.dragon&&dist(state,{x:state.x+55,y:state.y+20})<100){state.mounted=!state.mounted;say(state.mounted?"🐲 Nasedl/a jsi na draka!":"Sesedl/a jsi z draka.");}else say("Nejdřív musíš získat svého draka.");}if(e.code==="Space"){e.preventDefault();interact();}});
+window.addEventListener('keyup',e=>keys[e.key]=false);
+viewBtn.onclick=()=>{view=view?0:1;viewBtn.textContent=view?"Pohled: ze strany":"Pohled: shora";say(view?"Pohled ze strany je aktivní (prototyp).":"Pohled shora je aktivní.");};
+document.getElementById('reset').onclick=reset;
+reset();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
