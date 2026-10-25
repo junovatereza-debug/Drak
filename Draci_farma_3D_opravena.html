@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dračí farma 3D</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#8ec9e8;font-family:Arial;color:white}canvas{width:100%;height:100%;display:block}
+#hud{position:fixed;inset:0;pointer-events:none;text-shadow:0 2px 4px #123}
+.panel{background:#14283bd9;border:1px solid #ffffff55;border-radius:12px;padding:10px 14px}
+#title{position:absolute;top:12px;left:12px;font-size:20px;font-weight:bold}#tasks{position:absolute;top:58px;left:12px;font-size:13px;line-height:1.5}
+#status{position:absolute;right:12px;top:12px;text-align:right;font-size:13px}#help{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-size:13px;text-align:center;max-width:95vw}
+#toast{position:absolute;top:20%;left:50%;transform:translateX(-50%);font-size:20px;font-weight:bold;opacity:0}
+#start{position:fixed;inset:0;background:#10283dcc;display:grid;place-items:center;text-align:center}#start>div{max-width:540px;margin:20px;padding:28px;background:#142c3d;border-radius:20px}
+button{padding:13px 24px;border:0;border-radius:12px;background:#f2b84b;font-weight:bold;font-size:17px;cursor:pointer}
+</style></head><body><canvas id="game"></canvas>
+<div id="hud"><div id="title" class="panel">🐉 DRAČÍ FARMA · 3D</div>
+<div id="tasks" class="panel"><b>Kniha úkolů</b><br><span id="tasklist">□ Najdi dračího kamaráda<br>□ Navštiv vesnici<br>□ Prozkoumej hrad</span></div>
+<div id="status" class="panel">❤️ Život: 100<br>🐉 <span id="mount">Pěšky</span><br>⚔️ <span id="weapon">Meč schovaný</span></div><div id="toast"></div>
+<div id="help" class="panel">WASD / šipky – pohyb · myš – otáčení · MEZERNÍK – vzlet / skok · N – nasednout · M – meč · kliknutí – útok</div></div>
+<div id="start"><div><div style="font-size:48px">🐉</div><h1>Dračí farma – 3D</h1><p>Najdi pět druhů draků, staň se jejich kamarádem a prozkoumej kouzelný svět.</p><p>Klikni do hry a pohybuj myší. Esc uvolní kurzor.</p><button id="play">ZAČÍT HRÁT</button></div></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const canvas=document.querySelector('#game'),renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.outputColorSpace=THREE.SRGBColorSpace;
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x91c9e8);scene.fog=new THREE.Fog(0x91c9e8,70,220);
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,500);
+scene.add(new THREE.HemisphereLight(0xd9efff,0x52633b,2));const sun=new THREE.DirectionalLight(0xffe2ae,3);sun.position.set(-40,70,30);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+const mat=c=>new THREE.MeshStandardMaterial({color:c,roughness:.9}),grass=mat(0x4f8d43),wood=mat(0x65452d),leaf=mat(0x28643a),leaf2=mat(0x397b43);
+let floor=new THREE.Mesh(new THREE.PlaneGeometry(500,500),grass);floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+function tree(x,z,s=1){let g=new THREE.Group();g.position.set(x,0,z);g.scale.setScalar(s);let t=new THREE.Mesh(new THREE.CylinderGeometry(.3,.5,3.5,8),wood);t.position.y=1.75;g.add(t);for(let i=0;i<3;i++){let c=new THREE.Mesh(new THREE.ConeGeometry(2.2-i*.3,3.8,8),i%2?leaf2:leaf);c.position.y=3.7+i*1.25;g.add(c)}g.traverse(o=>{if(o.isMesh)o.castShadow=true});scene.add(g)}
+for(let i=0;i<95;i++){let x=(Math.random()-.5)*190,z=(Math.random()-.5)*190;if(Math.abs(x)<14&&z<25&&z>-55)continue;tree(x,z,.7+Math.random()*.8)}
+let road=new THREE.Mesh(new THREE.PlaneGeometry(5,145),mat(0xb69a6a));road.rotation.x=-Math.PI/2;road.position.set(4,.03,-35);road.rotation.z=-.1;scene.add(road);
+let river=new THREE.Mesh(new THREE.PlaneGeometry(12,90),new THREE.MeshStandardMaterial({color:0x3c9fc5,roughness:.2}));river.rotation.x=-Math.PI/2;river.position.set(-38,.03,-35);scene.add(river);
+function house(x,z){let g=new THREE.Group(),b=new THREE.Mesh(new THREE.BoxGeometry(6,4,5),mat(0xd5b887)),r=new THREE.Mesh(new THREE.ConeGeometry(4.5,3,4),mat(0x783c32));b.position.y=2;r.position.y=5.3;r.rotation.y=Math.PI/4;g.add(b,r);g.position.set(x,0,z);scene.add(g)}
+for(let i=0;i<6;i++)house(25+i%3*9,-32+Math.floor(i/3)*10);
+const castle=new THREE.Group();let keep=new THREE.Mesh(new THREE.BoxGeometry(22,14,18),mat(0x777e86));keep.position.y=7;castle.add(keep);
+for(let x of [-10,10])for(let z of [-8,8]){let t=new THREE.Mesh(new THREE.CylinderGeometry(2.2,2.5,19,8),mat(0x858b91)),r=new THREE.Mesh(new THREE.ConeGeometry(2.8,5,8),mat(0x783c32));t.position.set(x,9.5,z);r.position.set(x,21,z);castle.add(t,r)}castle.position.set(55,0,-95);scene.add(castle);
+function dragonModel(color){let g=new THREE.Group(),skin=mat(color),belly=mat(0xe5bd79);function part(geo,m,x,y,z,sx=1,sy=1,sz=1){let o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.scale.set(sx,sy,sz);o.castShadow=true;g.add(o);return o}
+part(new THREE.SphereGeometry(1.3,16,12),skin,0,1.5,0,1.4,.8,1.8);part(new THREE.CylinderGeometry(.4,.65,1.8,10),skin,0,2,-1.4).rotation.x=-.5;part(new THREE.SphereGeometry(.65,14,10),skin,0,2.65,-2.2);part(new THREE.ConeGeometry(.35,.8,10),belly,0,2.45,-2.8).rotation.x=-Math.PI/2;
+for(let side of [-1,1]){part(new THREE.SphereGeometry(.11,8,8),mat(0xffd34e),side*.48,2.85,-2.55);part(new THREE.ConeGeometry(.16,.65,8),mat(0xe8d9b4),side*.35,3.25,-2.05).rotation.z=side*.2;let sh=new THREE.Shape();sh.moveTo(0,0);sh.quadraticCurveTo(side*2,2.6,side*4,1.5);sh.quadraticCurveTo(side*2,.1,side*.5,-.5);sh.lineTo(0,0);let w=new THREE.Mesh(new THREE.ShapeGeometry(sh),new THREE.MeshStandardMaterial({color,side:THREE.DoubleSide}));w.position.set(side*.6,2.1,0);w.name='wing'+side;g.add(w);part(new THREE.CylinderGeometry(.2,.28,1,8),skin,side*.8,.55,.65)}
+part(new THREE.ConeGeometry(.32,2.8,9),skin,0,1.4,2.4).rotation.x=Math.PI/2;part(new THREE.SphereGeometry(1,12,8),belly,0,1.1,-.1,.9,.4,1.2);return g}
+const specs=[['Smaragdový drak',0x35a66a,-9,-19,1],['Ledový drak',0x69cce8,-48,-62,1.08],['Ohnivý drak',0xd9572e,48,-18,1.12],['Fialový drak',0x9863c9,-5,67,.96],['Zlatý drak',0xd6a52f,82,-104,1.2]];
+const dragons=specs.map(([name,color,x,z,s])=>{let model=dragonModel(color);model.position.set(x,0,z);model.scale.setScalar(s);scene.add(model);return{name,model}});
+let active=dragons[0],mounted=false,sword=false,yaw=0,pitch=.2,locked=false;
+const player=new THREE.Group();scene.add(player);function pbox(w,h,d,c,x,y,z){let o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(c));o.position.set(x,y,z);player.add(o)}pbox(.8,1.2,.4,0x315b9a,0,1.5,0);pbox(.34,.9,.35,0x293747,-.22,.45,0);pbox(.34,.9,.35,0x293747,.22,.45,0);let head=new THREE.Mesh(new THREE.SphereGeometry(.34,14,10),mat(0xe6b18a));head.position.y=2.4;player.add(head);player.position.set(0,0,18);
+let keys={};addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.code==='Space')e.preventDefault();if(e.key.toLowerCase()==='m'){sword=!sword;document.querySelector('#weapon').textContent=sword?'Meč v ruce':'Meč schovaný'}if(e.key.toLowerCase()==='n')mount()});addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+canvas.addEventListener('click',()=>{if(!document.pointerLockElement)canvas.requestPointerLock();else if(sword)notify('Švihnutí mečem!')});document.addEventListener('pointerlockchange',()=>locked=!!document.pointerLockElement);document.addEventListener('mousemove',e=>{if(locked){yaw-=e.movementX*.0035;pitch=Math.max(-.35,Math.min(1.05,pitch-e.movementY*.0028))}});
+function notify(t){let e=document.querySelector('#toast');e.textContent=t;e.style.opacity=1;clearTimeout(notify.timer);notify.timer=setTimeout(()=>e.style.opacity=0,2200)}
+function mount(){if(mounted){mounted=false;player.position.copy(active.model.position);player.position.y=0;document.querySelector('#mount').textContent='Pěšky';notify('Sesedl/a jsi z draka');return}let near=dragons.map(d=>({d,dist:player.position.distanceTo(d.model.position)})).sort((a,b)=>a.dist-b.dist)[0];if(near&&near.dist<11){active=near.d;mounted=true;document.querySelector('#mount').textContent=active.name;notify('Nasedl/a jsi na '+active.name+'!')}else notify('Přijď blíž k drakovi a stiskni N')}
+let done={friend:false,village:false,castle:false};function tasks(){document.querySelector('#tasklist').innerHTML=(done.friend?'☑':'□')+' Najdi dračího kamaráda<br>'+(done.village?'☑':'□')+' Navštiv vesnici<br>'+(done.castle?'☑':'□')+' Prozkoumej hrad'}
+const clock=new THREE.Clock();function animate(){requestAnimationFrame(animate);let dt=Math.min(clock.getDelta(),.04),f=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0),s=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),forward=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw)),right=new THREE.Vector3(forward.z,0,-forward.x),move=forward.multiplyScalar(f).add(right.multiplyScalar(s));if(move.length())move.normalize();
+if(mounted){active.model.position.addScaledVector(move,19*dt);active.model.position.y=3.6+Math.sin(performance.now()*.002)*.5+(keys[' ']?5:0);active.model.rotation.y=Math.atan2(move.x,move.z);player.position.copy(active.model.position);player.position.y-=.5}else{player.position.addScaledVector(move,8*dt);if(move.length())player.rotation.y=Math.atan2(move.x,move.z)}
+for(let d of dragons){if(d!==active||!mounted)d.model.position.y=.12+Math.sin(performance.now()*.0015+d.model.position.x)*.18;for(let side of [-1,1]){let w=d.model.getObjectByName('wing'+side);if(w)w.rotation.z=Math.sin(performance.now()*.008)*.25*side}}
+if(!done.friend&&!mounted&&dragons.some(d=>player.position.distanceTo(d.model.position)<7)){done.friend=true;tasks();notify('Našel/našla jsi dračího kamaráda! Stiskni N.')}
+if(!done.village&&player.position.distanceTo(new THREE.Vector3(34,0,-35))<18){done.village=true;tasks();notify('Navštívil/a jsi dračí vesnici!')}if(!done.castle&&player.position.distanceTo(castle.position)<23){done.castle=true;tasks();notify('Našel/našla jsi královský hrad!')}
+let target=(mounted?active.model.position:player.position).clone().add(new THREE.Vector3(0,2,0)),dist=mounted?16:10,offset=new THREE.Vector3(Math.sin(yaw)*dist*Math.cos(pitch),dist*(.22+Math.sin(pitch)),Math.cos(yaw)*dist*Math.cos(pitch));camera.position.lerp(target.clone().add(offset),.2);camera.lookAt(target);renderer.render(scene,camera)}
+animate();document.querySelector('#play').onclick=()=>{document.querySelector('#start').style.display='none';canvas.requestPointerLock();notify('Najdi jednoho z pěti draků!')};
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script></body></html>
